@@ -72,6 +72,26 @@ class ExecutionResult {
     results_[0]->setQueueTime(queue_time_ms);
   }
 
+  void updateResultSet(std::shared_ptr<ResultSet>& result,
+                       ExecutionResult::Type type,
+                       bool success = true) {
+    targets_meta_.clear();
+    pushed_down_filter_info_.clear();
+    success_ = success;
+    type_ = type;
+    results_ = result;
+  }
+  ExecutionResult::Type getResultType() const { return type_; }
+  void setResultType(ExecutionResult::Type type) { type_ = type; }
+  int64_t getExecutionTime() const { return execution_time_ms_; }
+  void setExecutionTime(int64_t execution_time_ms) {
+    execution_time_ms_ = execution_time_ms;
+  }
+
+  bool success_;
+  uint64_t execution_time_ms_;
+  enum Type { QueryResult, SimpleResult, Explaination } type_;
+
  private:
   TemporaryTable results_;
   std::vector<TargetMetaInfo> targets_meta_;
