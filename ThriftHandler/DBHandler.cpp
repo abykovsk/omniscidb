@@ -4858,7 +4858,7 @@ std::vector<PushedDownFilterInfo> DBHandler::execute_rel_alg(
                          g_runtime_query_interrupt_frequency};
   auto execution_time_ms = _return.getExecutionTime() + measure<>::execution([&]() {
     _return = ra_executor.executeRelAlgQuery(co, eo, explain_info.explain_plan, nullptr);
-  }));
+  });
   // reduce execution time by the time spent during queue waiting
   _return.setExecutionTime(execution_time_ms -= _return.getRows()->getQueueTime());
   VLOG(1) << cat.getDataMgr().getSystemMemoryUsage();
@@ -5528,7 +5528,7 @@ void DBHandler::execute_rel_alg_with_filter_push_down(
                            false,
                            system_parameters_)
                    .first.plan_result;
-  });
+  }));
 
   if (just_calcite_explain) {
     // return the new ra as the result
