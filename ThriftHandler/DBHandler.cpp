@@ -1031,13 +1031,30 @@ void DBHandler::sql_execute(TQueryResult& _return,
                              {}};
       prepare_query_result(_return, query_str, nonce);
       _return.total_time_ms += measure<>::execution([&]() {
+        auto query_state_proxy = query_state->createQueryStateProxy();
         DBHandler::sql_execute_impl(result,
-                                    query_state->createQueryStateProxy(),
+                                    query_state_proxy,
                                     column_format,
                                     nonce,
                                     session_ptr->get_executor_device_type(),
                                     first_n,
                                     at_most_n);
+      switch(result.getResultType()) {
+        case ExecutionResult::QueryResult:
+          convert_rows(_return,
+                       query_state_proxy,
+                       result.getTargetsMeta(),
+                       *result.getRows(),
+                       column_format,
+                       first_n,
+                       at_most_n);
+          break;
+        case ExecutionResult::SimpleResult:
+          convert_result(_return, result.getRows(), true);
+          break;
+        case ExecutionResult::Explaination:
+          convert_explain(_return, result.getRows(), true);
+          break;
       });
     }
     _return.total_time_ms += process_geo_copy_from(session);
@@ -4850,9 +4867,9 @@ std::vector<PushedDownFilterInfo> DBHandler::execute_rel_alg(
     return filter_push_down_info;
   }
   if (explain_info.justExplain()) {
-    _return.setResultType(ExecutionResult::Type::Explaination);
+    _return.setResultType(ExecutionResult::Explaination);
   } else if (!explain_info.justCalciteExplain()) {
-    _return.setResultType(ExecutionResult::Type::QueryResult);
+    _return.setResultType(ExecutionResult::QueryResult);
   }
   return {};
 }
@@ -5243,7 +5260,7 @@ void DBHandler::sql_execute_impl(ExecutionResult& _return,
     if (pw.isCalciteExplain() && (!g_enable_filter_push_down || g_cluster)) {
       // return the ra as the result
       _return.updateResultSet(std::make_shared<ResultSet>(ResultSet(query_ra)),
-                           ExecutionResult::Type::Explaination);
+                           ExecutionResult::Explaination);
       return;
     } else if (pw.isCalciteExplain()) {
       // removing the "explain calcite " from the beginning of the "query_str":
@@ -5290,7 +5307,7 @@ void DBHandler::sql_execute_impl(ExecutionResult& _return,
             // we only reach here if filter push down was enabled, but no filter
             // push down candidate was found
             _return.updateResultSet(std::make_shared<ResultSet>(ResultSet(query_ra)),
-                                 ExecutionResult::Type::Explaination);
+                                 ExecutionResult::Explaination);
           } else if (!filter_push_down_requests.empty()) {
             CHECK(!locks.empty());
             execute_rel_alg_with_filter_push_down(_return,
@@ -5313,7 +5330,7 @@ void DBHandler::sql_execute_impl(ExecutionResult& _return,
                 parse_to_ra(query_state_proxy, query_str, {}, false, system_parameters_)
                     .first.plan_result;
             _return.updateResultSet(std::make_shared<ResultSet>(ResultSet(query_ra)),
-                                 ExecutionResult::Type::Explaination);
+                                 ExecutionResult::Explaination);
           }
         });
     CHECK(dispatch_queue_);
@@ -5410,7 +5427,7 @@ void DBHandler::sql_execute_impl(ExecutionResult& _return,
           measure<>::execution([&]() { ddl->execute(*session_ptr); }));
       const auto create_string = show_create_stmt->getCreateStmt();
       _return.updateResultSet(std::make_shared<ResultSet>(ResultSet(create_string)),
-                           ExecutionResult::Type::SimpleResult);
+                           ExecutionResult::SimpleResult);
       return true;
     }
 
@@ -5431,7 +5448,7 @@ void DBHandler::sql_execute_impl(ExecutionResult& _return,
       // Read response message
       _return.updateResultSet(
           std::make_shared<ResultSet>(ResultSet(*import_stmt->return_message.get())),
-          ExecutionResult::Type::SimpleResult,
+          ExecutionResult::SimpleResult,
           import_stmt->get_success());
 
       // get geo_copy_from info
@@ -5516,7 +5533,7 @@ void DBHandler::execute_rel_alg_with_filter_push_down(
   if (just_calcite_explain) {
     // return the new ra as the result
     _return.setResultSet(std::make_shared<ResultSet>(ResultSet(query_ra)),
-                         ExecutionResult::Type::Explaination);
+                         ExecutionResult::Explaination);
     return;
   }
 

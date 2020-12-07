@@ -71,9 +71,9 @@ class ExecutionResult {
     CHECK(!results_.empty());
     results_[0]->setQueueTime(queue_time_ms);
   }
-
+  enum RType { QueryResult, SimpleResult, Explaination };
   void updateResultSet(std::shared_ptr<ResultSet>& result,
-                       ExecutionResult::Type type,
+                       RType type,
                        bool success = true) {
     targets_meta_.clear();
     pushed_down_filter_info_.clear();
@@ -81,8 +81,8 @@ class ExecutionResult {
     type_ = type;
     results_ = result;
   }
-  ExecutionResult::Type getResultType() const { return type_; }
-  void setResultType(ExecutionResult::Type type) { type_ = type; }
+  RType getResultType() const { return type_; }
+  void setResultType(RType type) { type_ = type; }
   int64_t getExecutionTime() const { return execution_time_ms_; }
   void setExecutionTime(int64_t execution_time_ms) {
     execution_time_ms_ = execution_time_ms;
@@ -90,7 +90,7 @@ class ExecutionResult {
 
   bool success_;
   uint64_t execution_time_ms_;
-  enum Type { QueryResult, SimpleResult, Explaination } type_;
+  RType type_;
 
  private:
   TemporaryTable results_;
