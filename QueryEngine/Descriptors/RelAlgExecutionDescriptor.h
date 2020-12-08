@@ -27,6 +27,18 @@ class ResultSet;
 
 class ExecutionResult {
  public:
+  ExecutionResult()
+    :results_(std::make_shared<ResultSet>(std::vector<TargetInfo>{},
+                                                     ExecutorDeviceType::CPU,
+                                                     QueryMemoryDescriptor(),
+                                                     nullptr,
+                                                     nullptr))
+    , filter_push_down_enabled_(false) {}
+  result{std::make_shared<ResultSet>(std::vector<TargetInfo>{},
+                                                     ExecutorDeviceType::CPU,
+                                                     QueryMemoryDescriptor(),
+                                                     nullptr,
+                                                     nullptr),
   ExecutionResult(const ResultSetPtr& rows,
                   const std::vector<TargetMetaInfo>& targets_meta);
 

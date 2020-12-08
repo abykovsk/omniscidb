@@ -983,6 +983,91 @@ TDatum DBHandler::value_to_thrift(const TargetValue& tv, const SQLTypeInfo& ti) 
   return datum;
 }
 
+void DBHandler::sql_execute_local(TQueryResult& _return,
+                                  const QueryStateProxy& query_state_proxy,
+                                  const ExecutorDeviceType device_type,
+                                  const std::string& query_str,
+                                  const bool column_format,
+                                  const std::string& nonce,
+                                  const int32_t first_n,
+                                  const int32_t at_most_n,
+                                  const bool validate) {
+  _return.total_time_ms = 0;
+  _return.nonce = nonce;
+  if (!validate) {
+    ParserWrapper pw{query_str};
+    switch (pw.getQueryType()) {
+      case ParserWrapper::QueryType::Read: {
+        _return.query_type = TQueryType::READ;
+        VLOG(1) << "query type: READ";
+        break;
+      }
+      case ParserWrapper::QueryType::Write: {
+        _return.query_type = TQueryType::WRITE;
+        VLOG(1) << "query type: WRITE";
+        break;
+      }
+      case ParserWrapper::QueryType::SchemaRead: {
+        _return.query_type = TQueryType::SCHEMA_READ;
+        VLOG(1) << "query type: SCHEMA READ";
+        break;
+      }
+      case ParserWrapper::QueryType::SchemaWrite: {
+        _return.query_type = TQueryType::SCHEMA_WRITE;
+        VLOG(1) << "query type: SCHEMA WRITE";
+        break;
+      }
+      default: {
+        _return.query_type = TQueryType::UNKNOWN;
+        LOG(WARNING) << "query type: UNKNOWN";
+        break;
+      }
+    }
+  }
+  ExecutionResult result;
+  _return.total_time_ms += measure<>::execution([&]() {
+  DBHandler::sql_execute_impl(result,
+                              query_state_proxy,
+                              column_format,
+                              device_type,
+                              first_n,
+                              at_most_n);
+  convert_data(_return,
+               result,
+               query_state_proxy,
+               column_format,
+               first_n,
+               at_most_n);
+}
+
+void DBHandler::convert_data(TQueryResult& _return,
+                             const ExecutionResult& result,
+                             const QueryStateProxy& query_state_proxy,
+                             const std::string& query_str,
+                             const bool column_format,
+                             const std::string& nonce,
+                             const int32_t first_n,
+                             const int32_t at_most_n) {
+  switch(result.getResultType()) {
+    case ExecutionResult::QueryResult:
+      convert_rows(_return,
+                   query_state_proxy,
+                   result.getTargetsMeta(),
+                   *result.getRows(),
+                   column_format,
+                   first_n,
+                   at_most_n);
+      break;
+    case ExecutionResult::SimpleResult:
+      convert_result(_return, *result.getRows(), true);
+      break;
+    case ExecutionResult::Explaination:
+      convert_explain(_return, *result.getRows(), true);
+      break;
+    };
+  });
+}
+
 void DBHandler::sql_execute(TQueryResult& _return,
                             const TSessionId& session,
                             const std::string& query_str,
@@ -1023,39 +1108,16 @@ void DBHandler::sql_execute(TQueryResult& _return,
       });
       _return.nonce = nonce;
     } else {
-      ExecutionResult result{std::make_shared<ResultSet>(std::vector<TargetInfo>{},
-                                                         ExecutorDeviceType::CPU,
-                                                         QueryMemoryDescriptor(),
-                                                         nullptr,
-                                                         nullptr),
-                             {}};
-      prepare_query_result(_return, query_str, nonce);
-      _return.total_time_ms += measure<>::execution([&]() {
-        auto query_state_proxy = query_state->createQueryStateProxy();
-        DBHandler::sql_execute_impl(result,
-                                    query_state_proxy,
-                                    column_format,
-                                    nonce,
-                                    session_ptr->get_executor_device_type(),
-                                    first_n,
-                                    at_most_n);
-      switch(result.getResultType()) {
-        case ExecutionResult::QueryResult:
-          convert_rows(_return,
-                       query_state_proxy,
-                       result.getTargetsMeta(),
-                       *result.getRows(),
-                       column_format,
-                       first_n,
-                       at_most_n);
-          break;
-        case ExecutionResult::SimpleResult:
-          convert_result(_return, result.getRows(), true);
-          break;
-        case ExecutionResult::Explaination:
-          convert_explain(_return, result.getRows(), true);
-          break;
-      });
+      sql_execute_local(_return,
+                        query_state->createQueryStateProxy(),
+                        session_ptr->get_executor_device_type(),
+                        query_str,
+                        column_format,
+                        nonce,
+                        first_n,
+                        at_most_n,
+                        false);
+
     }
     _return.total_time_ms += process_geo_copy_from(session);
 
@@ -1077,7 +1139,7 @@ void DBHandler::sql_execute(TQueryResult& _return,
     } else if (strstr(e.what(), "Parse failed: Encountered \";\"")) {
       THROW_MAPD_EXCEPTION("multiple SQL statements not allowed");
     } else if (strstr(e.what(),
-                      "Parse failed: Encountered \"<EOF>\" at line 0, column 0")) {
+                  "Parse failed: Encountered \"<EOF>\" at line 0, column 0")) {
       THROW_MAPD_EXCEPTION("empty SQL statment not allowed");
     } else {
       THROW_MAPD_EXCEPTION(std::string("Exception: ") + e.what());
@@ -1109,17 +1171,17 @@ void DBHandler::sql_execute(ExecutionResult& _return,
       DBHandler::sql_execute_impl(_return,
                                   query_state->createQueryStateProxy(),
                                   column_format,
-                                  nonce,
+                                  //nonce,
                                   session_ptr->get_executor_device_type(),
                                   first_n,
                                   at_most_n);
     });
 
-	_return.total_time_ms = total_time_ms + process_geo_copy_from(session);
+    _return.setExecutionTime(total_time_ms + process_geo_copy_from(session));
 
     stdlog.appendNameValuePairs(
         "execution_time_ms",
-        _return.execution_time_ms,
+        _return.getExecutionTime(),
         "total_time_ms",  // BE-3420 - Redundant with duration field
         stdlog.duration<std::chrono::milliseconds>());
     VLOG(1) << "Table Schema Locks:\n" << lockmgr::TableSchemaLockMgr::instance();
@@ -1529,7 +1591,8 @@ std::unordered_set<std::string> DBHandler::get_uc_compatible_table_names_by_colu
 
 TQueryResult DBHandler::validate_rel_alg(const std::string& query_ra,
                                          QueryStateProxy query_state_proxy) {
-  TQueryResult result;
+  TQueryResult _return;
+  ExecutionResult result;
   auto execute_rel_alg_task = std::make_shared<QueryDispatchQueue::Task>(
       [this, &result, &query_state_proxy, &query_ra](const size_t executor_index) {
         execute_rel_alg(result,
@@ -1548,7 +1611,8 @@ TQueryResult DBHandler::validate_rel_alg(const std::string& query_ra,
   dispatch_queue_->submit(execute_rel_alg_task, /*is_update_delete=*/false);
   auto result_future = execute_rel_alg_task->get_future();
   result_future.get();
-  return result;
+  convert_data(_return, result, query_state_proxy, true, -1, -1);
+  return _return;
 }
 
 void DBHandler::get_roles(std::vector<std::string>& roles, const TSessionId& session) {
@@ -2234,8 +2298,8 @@ void DBHandler::get_tables_meta_impl(std::vector<TTableMeta>& _return,
             query_state_proxy, td->viewSQL, {}, with_table_locks, system_parameters_);
         const auto query_ra = parse_result.plan_result;
 
-        TQueryResult result;
-        execute_rel_alg(result,
+        ExecutionResult ex_result;
+        execute_rel_alg(ex_result,
                         query_state_proxy,
                         query_ra,
                         true,
@@ -2245,6 +2309,8 @@ void DBHandler::get_tables_meta_impl(std::vector<TTableMeta>& _return,
                         /*just_validate=*/true,
                         /*find_push_down_candidates=*/false,
                         ExplainInfo::defaults());
+        TQueryResult result;
+        convert_data(result, ex_result, query_state_proxy, true, -1, -1);
         num_cols = result.row_set.row_desc.size();
         for (const auto& col : result.row_set.row_desc) {
           if (col.is_physical) {
@@ -4916,12 +4982,7 @@ void DBHandler::execute_rel_alg_df(TDataFrame& _return,
                          system_parameters_.gpu_input_mem_limit,
                          g_enable_runtime_query_interrupt,
                          g_runtime_query_interrupt_frequency};
-  ExecutionResult result{std::make_shared<ResultSet>(std::vector<TargetInfo>{},
-                                                     ExecutorDeviceType::CPU,
-                                                     QueryMemoryDescriptor(),
-                                                     nullptr,
-                                                     nullptr),
-                         {}};
+  ExecutionResult result;
   _return.execution_time_ms += measure<>::execution(
       [&]() { result = ra_executor.executeRelAlgQuery(co, eo, false, nullptr); });
   _return.execution_time_ms -= result.getRows()->getQueueTime();
