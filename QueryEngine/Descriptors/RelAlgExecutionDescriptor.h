@@ -27,17 +27,7 @@ class ResultSet;
 
 class ExecutionResult {
  public:
-  ExecutionResult()
-    :results_(std::make_shared<ResultSet>(std::vector<TargetInfo>{},
-                                          ExecutorDeviceType::CPU,
-                                          QueryMemoryDescriptor(),
-                                          nullptr,
-                                          nullptr))
-    , filter_push_down_enabled_(false)
-    , success_(true)
-    , execution_time_ms_(0)
-    , type_(QueryResult)
-  {}
+  ExecutionResult();
 
   ExecutionResult(const ResultSetPtr& rows,
                   const std::vector<TargetMetaInfo>& targets_meta);
@@ -84,15 +74,7 @@ class ExecutionResult {
     results_[0]->setQueueTime(queue_time_ms);
   }
   enum RType { QueryResult, SimpleResult, Explaination };
-  void updateResultSet(const std::string& query_ra,
-                       RType type,
-                       bool success = true) {
-    targets_meta_.clear();
-    pushed_down_filter_info_.clear();
-    success_ = success;
-    type_ = type;
-    results_ = std::make_shared<ResultSet>(query_ra);
-  }
+  void updateResultSet(const std::string& query_ra, RType type, bool success = true);
   RType getResultType() const { return type_; }
   void setResultType(RType type) { type_ = type; }
   int64_t getExecutionTime() const { return execution_time_ms_; }
@@ -113,7 +95,6 @@ class ExecutionResult {
   bool success_;
   uint64_t execution_time_ms_;
   RType type_;
-
 };
 
 class RelAlgNode;

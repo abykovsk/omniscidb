@@ -649,8 +649,7 @@ class DBHandler : public OmniSciIf {
                          const bool column_format,
                          const std::string& nonce,
                          const int32_t first_n,
-                         const int32_t at_most_n,
-                         const bool validate);
+                         const int32_t at_most_n);
 
   int64_t process_geo_copy_from(const TSessionId& session_id);
 

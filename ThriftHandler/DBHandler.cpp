@@ -990,38 +990,35 @@ void DBHandler::sql_execute_local(TQueryResult& _return,
                                   const bool column_format,
                                   const std::string& nonce,
                                   const int32_t first_n,
-                                  const int32_t at_most_n,
-                                  const bool validate) {
+                                  const int32_t at_most_n) {
   _return.total_time_ms = 0;
   _return.nonce = nonce;
-  if (!validate) {
-    ParserWrapper pw{query_str};
-    switch (pw.getQueryType()) {
-      case ParserWrapper::QueryType::Read: {
-        _return.query_type = TQueryType::READ;
-        VLOG(1) << "query type: READ";
-        break;
-      }
-      case ParserWrapper::QueryType::Write: {
-        _return.query_type = TQueryType::WRITE;
-        VLOG(1) << "query type: WRITE";
-        break;
-      }
-      case ParserWrapper::QueryType::SchemaRead: {
-        _return.query_type = TQueryType::SCHEMA_READ;
-        VLOG(1) << "query type: SCHEMA READ";
-        break;
-      }
-      case ParserWrapper::QueryType::SchemaWrite: {
-        _return.query_type = TQueryType::SCHEMA_WRITE;
-        VLOG(1) << "query type: SCHEMA WRITE";
-        break;
-      }
-      default: {
-        _return.query_type = TQueryType::UNKNOWN;
-        LOG(WARNING) << "query type: UNKNOWN";
-        break;
-      }
+  ParserWrapper pw{query_str};
+  switch (pw.getQueryType()) {
+    case ParserWrapper::QueryType::Read: {
+      _return.query_type = TQueryType::READ;
+      VLOG(1) << "query type: READ";
+      break;
+    }
+    case ParserWrapper::QueryType::Write: {
+      _return.query_type = TQueryType::WRITE;
+      VLOG(1) << "query type: WRITE";
+      break;
+    }
+    case ParserWrapper::QueryType::SchemaRead: {
+      _return.query_type = TQueryType::SCHEMA_READ;
+      VLOG(1) << "query type: SCHEMA READ";
+      break;
+    }
+    case ParserWrapper::QueryType::SchemaWrite: {
+      _return.query_type = TQueryType::SCHEMA_WRITE;
+      VLOG(1) << "query type: SCHEMA WRITE";
+      break;
+    }
+    default: {
+      _return.query_type = TQueryType::UNKNOWN;
+      LOG(WARNING) << "query type: UNKNOWN";
+      break;
     }
   }
   ExecutionResult result;
@@ -1115,9 +1112,7 @@ void DBHandler::sql_execute(TQueryResult& _return,
                         column_format,
                         nonce,
                         first_n,
-                        at_most_n,
-                        false);
-
+                        at_most_n);
     }
     _return.total_time_ms += process_geo_copy_from(session);
 
