@@ -1026,18 +1026,20 @@ void DBHandler::sql_execute_local(TQueryResult& _return,
   }
   ExecutionResult result;
   _return.total_time_ms += measure<>::execution([&]() {
-  DBHandler::sql_execute_impl(result,
-                              query_state_proxy,
-                              column_format,
-                              device_type,
-                              first_n,
-                              at_most_n);
-  convert_data(_return,
-               result,
-               query_state_proxy,
-               column_format,
-               first_n,
-               at_most_n);
+    DBHandler::sql_execute_impl(result,
+                                query_state_proxy,
+                                column_format,
+                                device_type,
+                                first_n,
+                                at_most_n);
+    convert_data(_return,
+                 result,
+                 query_state_proxy,
+                 query_str,
+                 column_format,
+                 first_n,
+                 at_most_n);
+  });
 }
 
 void DBHandler::convert_data(TQueryResult& _return,
@@ -1045,7 +1047,6 @@ void DBHandler::convert_data(TQueryResult& _return,
                              const QueryStateProxy& query_state_proxy,
                              const std::string& query_str,
                              const bool column_format,
-                             const std::string& nonce,
                              const int32_t first_n,
                              const int32_t at_most_n) {
   switch(result.getResultType()) {
@@ -1064,8 +1065,7 @@ void DBHandler::convert_data(TQueryResult& _return,
     case ExecutionResult::Explaination:
       convert_explain(_return, *result.getRows(), true);
       break;
-    };
-  });
+  }
 }
 
 void DBHandler::sql_execute(TQueryResult& _return,
@@ -1611,7 +1611,7 @@ TQueryResult DBHandler::validate_rel_alg(const std::string& query_ra,
   dispatch_queue_->submit(execute_rel_alg_task, /*is_update_delete=*/false);
   auto result_future = execute_rel_alg_task->get_future();
   result_future.get();
-  convert_data(_return, result, query_state_proxy, true, -1, -1);
+  convert_data(_return, result, query_state_proxy, query_ra, true, -1, -1);
   return _return;
 }
 
@@ -2310,7 +2310,7 @@ void DBHandler::get_tables_meta_impl(std::vector<TTableMeta>& _return,
                         /*find_push_down_candidates=*/false,
                         ExplainInfo::defaults());
         TQueryResult result;
-        convert_data(result, ex_result, query_state_proxy, true, -1, -1);
+        convert_data(result, ex_result, query_state_proxy, query_ra, true, -1, -1);
         num_cols = result.row_set.row_desc.size();
         for (const auto& col : result.row_set.row_desc) {
           if (col.is_physical) {
@@ -5309,7 +5309,7 @@ void DBHandler::sql_execute_impl(ExecutionResult& _return,
     if (pw.is_exec_ra) {
       query_ra = pw.actual_query;
     } else {
-      _return.setExecutionTime(_return.getExecutionTime() += measure<>::execution([&]() {
+      _return.addExecutionTime(measure<>::execution([&]() {
         TPlanResult result;
         std::tie(result, locks) =
             parse_to_ra(query_state_proxy, query_str, {}, true, system_parameters_);
@@ -5320,8 +5320,7 @@ void DBHandler::sql_execute_impl(ExecutionResult& _return,
     std::string query_ra_calcite_explain;
     if (pw.isCalciteExplain() && (!g_enable_filter_push_down || g_cluster)) {
       // return the ra as the result
-      _return.updateResultSet(std::make_shared<ResultSet>(ResultSet(query_ra)),
-                           ExecutionResult::Explaination);
+      _return.updateResultSet(query_ra, ExecutionResult::Explaination);
       return;
     } else if (pw.isCalciteExplain()) {
       // removing the "explain calcite " from the beginning of the "query_str":
@@ -5367,8 +5366,7 @@ void DBHandler::sql_execute_impl(ExecutionResult& _return,
           if (explain_info.justCalciteExplain() && filter_push_down_requests.empty()) {
             // we only reach here if filter push down was enabled, but no filter
             // push down candidate was found
-            _return.updateResultSet(std::make_shared<ResultSet>(ResultSet(query_ra)),
-                                 ExecutionResult::Explaination);
+            _return.updateResultSet(query_ra, ExecutionResult::Explaination);
           } else if (!filter_push_down_requests.empty()) {
             CHECK(!locks.empty());
             execute_rel_alg_with_filter_push_down(_return,
@@ -5390,8 +5388,7 @@ void DBHandler::sql_execute_impl(ExecutionResult& _return,
             query_ra =
                 parse_to_ra(query_state_proxy, query_str, {}, false, system_parameters_)
                     .first.plan_result;
-            _return.updateResultSet(std::make_shared<ResultSet>(ResultSet(query_ra)),
-                                 ExecutionResult::Explaination);
+            _return.updateResultSet(query_ra, ExecutionResult::Explaination);
           }
         });
     CHECK(dispatch_queue_);
@@ -5410,7 +5407,7 @@ void DBHandler::sql_execute_impl(ExecutionResult& _return,
           dynamic_cast<Parser::OptimizeTableStmt*>(parse_trees.front().get());
       CHECK(optimize_stmt);
 
-      _return.setExecutionTime(_return.getExecutionTime() += measure<>::execution([&]() {
+      _return.addExecutionTime(measure<>::execution([&]() {
         const auto td_with_lock =
             lockmgr::TableSchemaLockContainer<lockmgr::WriteLock>::acquireTableDescriptor(
                 cat, optimize_stmt->getTableName());
@@ -5437,7 +5434,6 @@ void DBHandler::sql_execute_impl(ExecutionResult& _return,
         }
         optimizer.recomputeMetadata();
       }));
-
       return;
     }
     if (pw.is_validate) {
@@ -5456,7 +5452,7 @@ void DBHandler::sql_execute_impl(ExecutionResult& _return,
 
       std::string output{"Result for validate"};
       if (g_cluster && leaf_aggregator_.leafCount()) {
-        _return.setExecutionTime(_return.getExecutionTime() += measure<>::execution([&]() {
+        _return.addExecutionTime(measure<>::execution([&]() {
           const DistributedValidate validator(validate_stmt->getType(),
                                               validate_stmt->isRepairTypeRemove(),
                                               cat,  // tables may be dropped here
@@ -5468,8 +5464,7 @@ void DBHandler::sql_execute_impl(ExecutionResult& _return,
       } else {
         output = "Not running on a cluster nothing to validate";
       }
-      _return.updateResultSet(std::make_shared<ResultSet>(ResultSet(output)),
-                           ExecutionResult::Type::SimpleResult);
+      _return.updateResultSet(output, ExecutionResult::SimpleResult);
       return;
     }
   }
@@ -5484,11 +5479,10 @@ void DBHandler::sql_execute_impl(ExecutionResult& _return,
     }
     const auto show_create_stmt = dynamic_cast<Parser::ShowCreateTableStmt*>(ddl);
     if (show_create_stmt) {
-      _return.setExecutionTime(_return.getExecutionTime() +=
-          measure<>::execution([&]() { ddl->execute(*session_ptr); }));
+      _return.addExecutionTime(measure<>::execution([&]() {
+          ddl->execute(*session_ptr); }));
       const auto create_string = show_create_stmt->getCreateStmt();
-      _return.updateResultSet(std::make_shared<ResultSet>(ResultSet(create_string)),
-                           ExecutionResult::SimpleResult);
+      _return.updateResultSet(create_string, ExecutionResult::SimpleResult);
       return true;
     }
 
@@ -5499,18 +5493,16 @@ void DBHandler::sql_execute_impl(ExecutionResult& _return,
         throw std::runtime_error(
             "Cannot import on an individual leaf. Please import from the Aggregator.");
       } else if (leaf_aggregator_.leafCount() > 0) {
-        _return.setExecutionTime(_return.getExecutionTime() += measure<>::execution(
+        _return.addExecutionTime(measure<>::execution(
             [&]() { execute_distributed_copy_statement(import_stmt, *session_ptr); }));
       } else {
-        _return.setExecutionTime(_return.getExecutionTime() +=
-            measure<>::execution([&]() { ddl->execute(*session_ptr); }));
+        _return.addExecutionTime(measure<>::execution([&]() { ddl->execute(*session_ptr); }));
       }
 
       // Read response message
-      _return.updateResultSet(
-          std::make_shared<ResultSet>(ResultSet(*import_stmt->return_message.get())),
-          ExecutionResult::SimpleResult,
-          import_stmt->get_success());
+      _return.updateResultSet(*import_stmt->return_message.get(),
+                              ExecutionResult::SimpleResult,
+                              import_stmt->get_success());
 
       // get geo_copy_from info
       if (import_stmt->was_geo_copy_from()) {
@@ -5534,7 +5526,7 @@ void DBHandler::sql_execute_impl(ExecutionResult& _return,
       std::tie(result, locks) =
           parse_to_ra(query_state_proxy, query_string, {}, true, system_parameters_);
     }
-    _return.setExecutionTime(_return.getExecutionTime() += measure<>::execution([&]() {
+    _return.addExecutionTime(measure<>::execution([&]() {
       ddl->execute(*session_ptr);
       check_and_invalidate_sessions(ddl);
     }));
@@ -5554,9 +5546,7 @@ void DBHandler::sql_execute_impl(ExecutionResult& _return,
       if (parse_trees.size() != 1) {
         throw std::runtime_error("Can only run one INSERT INTO query at a time.");
       }
-
-      _return.setExecutionTime(_return.getExecutionTime() +=
-          measure<>::execution([&]() { stmtp->execute(*session_ptr); }));
+      _return.addExecutionTime(measure<>::execution([&]() { stmtp->execute(*session_ptr); }));
     }
   }
 }
@@ -5582,7 +5572,7 @@ void DBHandler::execute_rel_alg_with_filter_push_down(
     filter_push_down_info.push_back(filter_push_down_info_for_request);
   }
   // deriving the new relational algebra plan with respect to the pushed down filters
-  _return.setExecutionTime(_return.getExecutionTime() += measure<>::execution([&]() {
+  _return.addExecutionTime(measure<>::execution([&]() {
     query_ra = parse_to_ra(query_state_proxy,
                            query_state_proxy.getQueryState().getQueryStr(),
                            filter_push_down_info,
@@ -5593,8 +5583,7 @@ void DBHandler::execute_rel_alg_with_filter_push_down(
 
   if (just_calcite_explain) {
     // return the new ra as the result
-    _return.setResultSet(std::make_shared<ResultSet>(ResultSet(query_ra)),
-                         ExecutionResult::Explaination);
+    _return.updateResultSet(query_ra, ExecutionResult::Explaination);
     return;
   }
 

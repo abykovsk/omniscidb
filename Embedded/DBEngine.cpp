@@ -115,7 +115,7 @@ class DBEngineImpl : public DBEngine {
       }
     }
     try {
-      dbe_handler_ = mapd::make_shared<DBHandler>(
+      db_handler_ = mapd::make_shared<DBHandler>(
               prog_config_opts.db_leaves,
               prog_config_opts.string_leaves,
               prog_config_opts.base_path,
@@ -152,7 +152,7 @@ class DBEngineImpl : public DBEngine {
     } catch (const std::exception& e) {
       LOG(FATAL) << "Failed to initialize database handler: " << e.what();
     }
-    dbe_handler_->connect(session_id_, OMNISCI_ROOT_USER, OMNISCI_ROOT_PASSWD_DEFAULT, OMNISCI_DEFAULT_DB);
+    db_handler_->connect(session_id_, OMNISCI_ROOT_USER, OMNISCI_ROOT_PASSWD_DEFAULT, OMNISCI_DEFAULT_DB);
     base_path_ = base_path;
     initialized = true;
     return true;
@@ -161,7 +161,6 @@ class DBEngineImpl : public DBEngine {
   std::shared_ptr<CursorImpl> sql_execute_dbe(const TSessionId& session_id,
                                               const std::string& query_str,
                                               const bool column_format,
-                                              const std::string& nonce,
                                               const int32_t first_n,
                                               const int32_t at_most_n) {
     ExecutionResult result{std::make_shared<ResultSet>(std::vector<TargetInfo>{},
@@ -170,7 +169,7 @@ class DBEngineImpl : public DBEngine {
                                                      nullptr,
                                                      nullptr),
                          {}};
-    sql_execute(result, session_id, query_str, column_format, nonce, first_n, at_most_n);
+    db_handler_->sql_execute(result, session_id, query_str, column_format, first_n, at_most_n);
     auto& targets = result.getTargetsMeta();
     std::vector<std::string> col_names;
     for (const auto target : targets) {
@@ -180,7 +179,7 @@ class DBEngineImpl : public DBEngine {
   }
 
   void executeDDL(const std::string& query) {
-    auto res = sql_execute_dbe(session_id_, query, false, "", -1, -1);
+    auto res = sql_execute_dbe(session_id_, query, false, -1, -1);
   }
 
   void importArrowTable(const std::string& name,
@@ -188,7 +187,7 @@ class DBEngineImpl : public DBEngine {
                         uint64_t fragment_size) {
     setArrowTable(name, table);
     try {
-      auto session = dbe_handler_->get_session_copy(session_id_);
+      auto session = db_handler_->get_session_copy(session_id_);
       TableDescriptor td;
       td.tableName = name;
       td.userId = session.get_currentUser().userId;
@@ -218,16 +217,16 @@ class DBEngineImpl : public DBEngine {
   }
 
   std::shared_ptr<CursorImpl> executeDML(const std::string& query) {
-    return sql_execute_dbe(session_id_, query, false, "", -1, -1);
+    return sql_execute_dbe(session_id_, query, false, -1, -1);
   }
 
   std::shared_ptr<CursorImpl> executeRA(const std::string& query) {
-    return sql_execute_dbe(session_id_, query, false, "", -1, -1);
+    return sql_execute_dbe(session_id_, query, false, -1, -1);
   }
 
   std::vector<std::string> getTables() {
     std::vector<std::string> table_names;
-    auto catalog = dbe_handler_->get_session_copy(session_id_).get_catalog_ptr();
+    auto catalog = db_handler_->get_session_copy(session_id_).get_catalog_ptr();
     if (catalog) {
       const auto tables = catalog->getAllTableMetadata();
       for (const auto td : tables) {
@@ -245,7 +244,7 @@ class DBEngineImpl : public DBEngine {
 
   std::vector<ColumnDetails> getTableDetails(const std::string& table_name) {
     std::vector<ColumnDetails> result;
-    auto catalog = dbe_handler_->get_session_copy(session_id_).get_catalog_ptr();
+    auto catalog = db_handler_->get_session_copy(session_id_).get_catalog_ptr();
     if (catalog) {
       auto metadata = catalog->getMetadataForTable(table_name, false);
       if (metadata) {
@@ -313,7 +312,7 @@ class DBEngineImpl : public DBEngine {
 
   void createDatabase(const std::string& db_name) {
     Catalog_Namespace::DBMetadata db;
-    auto user = dbe_handler_->get_session_copy(session_id_).get_currentUser();
+    auto user = db_handler_->get_session_copy(session_id_).get_currentUser();
     auto& sys_cat = Catalog_Namespace::SysCatalog::instance();
     if (!sys_cat.getMetadataForDB(db_name, db)) {
       sys_cat.createDatabase(db_name, user.userId);
@@ -330,20 +329,20 @@ class DBEngineImpl : public DBEngine {
 
   bool setDatabase(std::string& db_name) {
     auto& sys_cat = Catalog_Namespace::SysCatalog::instance();
-    auto user = dbe_handler_->get_session_copy(session_id_).get_currentUser();
+    auto user = db_handler_->get_session_copy(session_id_).get_currentUser();
     auto catalog = sys_cat.switchDatabase(db_name, user.userName);
     return true;
   }
 
   bool login(std::string& db_name, std::string& user_name, const std::string& password) {
-    dbe_handler_->disconnect(session_id_);
-    dbe_handler_->connect(session_id_, user_name, password, db_name);
+    db_handler_->disconnect(session_id_);
+    db_handler_->connect(session_id_, user_name, password, db_name);
     return true;
   }
 
  protected:
   void reset() {
-    dbe_handler_->disconnect(session_id_);
+    db_handler_->disconnect(session_id_);
     if (is_temp_db_) {
       boost::filesystem::remove_all(base_path_);
     }
@@ -419,7 +418,7 @@ class DBEngineImpl : public DBEngine {
  private:
   std::string base_path_;
   std::string session_id_;
-  mapd::shared_ptr<DBEHandler> dbe_handler_;
+  mapd::shared_ptr<DBHandler> db_handler_;
   bool is_temp_db_;
   std::string udf_filename_;
 

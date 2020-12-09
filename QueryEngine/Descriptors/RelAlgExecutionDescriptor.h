@@ -29,16 +29,16 @@ class ExecutionResult {
  public:
   ExecutionResult()
     :results_(std::make_shared<ResultSet>(std::vector<TargetInfo>{},
-                                                     ExecutorDeviceType::CPU,
-                                                     QueryMemoryDescriptor(),
-                                                     nullptr,
-                                                     nullptr))
-    , filter_push_down_enabled_(false) {}
-  result{std::make_shared<ResultSet>(std::vector<TargetInfo>{},
-                                                     ExecutorDeviceType::CPU,
-                                                     QueryMemoryDescriptor(),
-                                                     nullptr,
-                                                     nullptr),
+                                          ExecutorDeviceType::CPU,
+                                          QueryMemoryDescriptor(),
+                                          nullptr,
+                                          nullptr))
+    , filter_push_down_enabled_(false)
+    , success_(true)
+    , execution_time_ms_(0)
+    , type_(QueryResult)
+  {}
+
   ExecutionResult(const ResultSetPtr& rows,
                   const std::vector<TargetMetaInfo>& targets_meta);
 
@@ -84,14 +84,14 @@ class ExecutionResult {
     results_[0]->setQueueTime(queue_time_ms);
   }
   enum RType { QueryResult, SimpleResult, Explaination };
-  void updateResultSet(std::shared_ptr<ResultSet>& result,
+  void updateResultSet(const std::string& query_ra,
                        RType type,
                        bool success = true) {
     targets_meta_.clear();
     pushed_down_filter_info_.clear();
     success_ = success;
     type_ = type;
-    results_ = result;
+    results_ = std::make_shared<ResultSet>(query_ra);
   }
   RType getResultType() const { return type_; }
   void setResultType(RType type) { type_ = type; }
@@ -99,10 +99,9 @@ class ExecutionResult {
   void setExecutionTime(int64_t execution_time_ms) {
     execution_time_ms_ = execution_time_ms;
   }
-
-  bool success_;
-  uint64_t execution_time_ms_;
-  RType type_;
+  void addExecutionTime(int64_t execution_time_ms) {
+    execution_time_ms_ += execution_time_ms;
+  }
 
  private:
   TemporaryTable results_;
@@ -111,6 +110,10 @@ class ExecutionResult {
   std::vector<PushedDownFilterInfo> pushed_down_filter_info_;
   // whether or not it was allowed to look for filters to push down
   bool filter_push_down_enabled_;
+  bool success_;
+  uint64_t execution_time_ms_;
+  RType type_;
+
 };
 
 class RelAlgNode;

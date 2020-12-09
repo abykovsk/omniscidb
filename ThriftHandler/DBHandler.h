@@ -654,6 +654,14 @@ class DBHandler : public OmniSciIf {
 
   int64_t process_geo_copy_from(const TSessionId& session_id);
 
+  void convert_data(TQueryResult& _return,
+                     const ExecutionResult& result,
+                     const QueryStateProxy& query_state_proxy,
+                     const std::string& query_str,
+                     const bool column_format,
+                     const int32_t first_n,
+                     const int32_t at_most_n);
+
   void sql_execute_impl(ExecutionResult& _return,
                         QueryStateProxy,
                         const bool column_format,
