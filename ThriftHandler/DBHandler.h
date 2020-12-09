@@ -640,7 +640,7 @@ class DBHandler : public OmniSciIf {
 
   void sql_execute_local(TQueryResult& _return,
                          const QueryStateProxy& query_state_proxy,
-                         const ExecutorDeviceType device_type,
+                         const std::shared_ptr<Catalog_Namespace::SessionInfo> session_ptr,
                          const std::string& query_str,
                          const bool column_format,
                          const std::string& nonce,
@@ -711,6 +711,9 @@ class DBHandler : public OmniSciIf {
 
   void executeDdl(TQueryResult& _return,
                   const std::string& query_ra,
+                  std::shared_ptr<Catalog_Namespace::SessionInfo const> session_ptr);
+
+  void executeDdl(ExecutionResult& _return,
                   std::shared_ptr<Catalog_Namespace::SessionInfo const> session_ptr);
 
   TColumnType populateThriftColumnType(const Catalog_Namespace::Catalog* cat,

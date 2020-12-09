@@ -160,12 +160,13 @@ ColumnDetailsTp = namedtuple("ColumnDetails", ["name", "type", "nullable",
                                              "is_array"])
 cdef class PyDbEngine:
     cdef shared_ptr[DBEngine] c_dbe  #Hold a C++ instance which we're wrapping
-    cdef map[string, string] c_parameters
 
-    def __cinit__(self, **kwargs):
-        for key, value in kwargs.items():
-            self.c_parameters[key] = str(value)
-        self.c_dbe = DBEngine.create(self.c_parameters)
+    def __cinit__(self, data_path, *args, **kwargs):
+        cmd_str = data_path
+        cmd_str.join(' --%s' % x for x in args.iteritems())
+        cmd_str.join('--%s %r' % x for x in kwargs.iteritems())
+        self.c_dbe = DBEngine.create(bytes(cmd_str, 'utf-8'))
+        print(cmd_str)
         if self.closed:
             raise RuntimeError('Initialization failed')
 

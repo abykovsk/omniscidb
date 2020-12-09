@@ -985,7 +985,7 @@ TDatum DBHandler::value_to_thrift(const TargetValue& tv, const SQLTypeInfo& ti) 
 
 void DBHandler::sql_execute_local(TQueryResult& _return,
                                   const QueryStateProxy& query_state_proxy,
-                                  const ExecutorDeviceType device_type,
+                                  const std::shared_ptr<Catalog_Namespace::SessionInfo> session_ptr,
                                   const std::string& query_str,
                                   const bool column_format,
                                   const std::string& nonce,
@@ -1026,16 +1026,20 @@ void DBHandler::sql_execute_local(TQueryResult& _return,
     DBHandler::sql_execute_impl(result,
                                 query_state_proxy,
                                 column_format,
-                                device_type,
+                                session_ptr->get_executor_device_type(),
                                 first_n,
                                 at_most_n);
-    convert_data(_return,
-                 result,
-                 query_state_proxy,
-                 query_str,
-                 column_format,
-                 first_n,
-                 at_most_n);
+    if (result.getResultType() == ExecutionResult::CalciteDdl) {
+      executeDdl(_return, result.getExplanation(), session_ptr);
+    } else {
+      convert_data(_return,
+                   result,
+                   query_state_proxy,
+                   query_str,
+                   column_format,
+                   first_n,
+                   at_most_n);
+    }
   });
 }
 
@@ -1107,7 +1111,7 @@ void DBHandler::sql_execute(TQueryResult& _return,
     } else {
       sql_execute_local(_return,
                         query_state->createQueryStateProxy(),
-                        session_ptr->get_executor_device_type(),
+                        session_ptr,
                         query_str,
                         column_format,
                         nonce,
@@ -1170,6 +1174,9 @@ void DBHandler::sql_execute(ExecutionResult& _return,
                                   session_ptr->get_executor_device_type(),
                                   first_n,
                                   at_most_n);
+      if (_return.getResultType() == ExecutionResult::CalciteDdl) {
+        executeDdl(_return, session_ptr);
+      }
     });
 
     _return.setExecutionTime(total_time_ms + process_geo_copy_from(session));
@@ -5291,9 +5298,9 @@ void DBHandler::sql_execute_impl(ExecutionResult& _return,
       query_ra_calcite_explain =
           parse_to_ra(query_state_proxy, temp_query_str, {}, false, system_parameters_)
               .first.plan_result;
-//    } else if (pw.isCalciteDdl()) {
-//      executeDdl(_return, query_ra, session_ptr);
-//      return;
+    } else if (pw.isCalciteDdl()) {
+      _return.updateResultSet(query_ra, ExecutionResult::CalciteDdl);
+      return;
     }
     const auto explain_info = pw.getExplainInfo();
     std::vector<PushedDownFilterInfo> filter_push_down_requests;
@@ -6396,4 +6403,13 @@ void DBHandler::executeDdl(
   } else {
     executor.execute(_return);
   }
+}
+
+void DBHandler::executeDdl(
+    ExecutionResult& _return,
+    std::shared_ptr<Catalog_Namespace::SessionInfo const> session_ptr) {
+  auto query_ra = _return.getExplanation(); 
+  DdlCommandExecutor executor = DdlCommandExecutor(query_ra, session_ptr);
+  TQueryResult result;
+  executor.execute(result);
 }

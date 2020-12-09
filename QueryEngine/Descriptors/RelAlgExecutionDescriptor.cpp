@@ -140,6 +140,13 @@ void ExecutionResult::updateResultSet(const std::string& query,
   results_ = std::make_shared<ResultSet>(query);
 }
 
+std::string ExecutionResult::getExplanation() {
+  if (!empty()) {
+    return getRows()->getExplanation();
+  }
+  return {}; 
+}
+
 void RaExecutionDesc::setResult(const ExecutionResult& result) {
   result_ = result;
   body_->setContextData(this);

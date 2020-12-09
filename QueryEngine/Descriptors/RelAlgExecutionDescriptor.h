@@ -73,7 +73,10 @@ class ExecutionResult {
     CHECK(!results_.empty());
     results_[0]->setQueueTime(queue_time_ms);
   }
-  enum RType { QueryResult, SimpleResult, Explaination };
+
+  enum RType { QueryResult, SimpleResult, Explaination, CalciteDdl };
+
+  std::string getExplanation();
   void updateResultSet(const std::string& query_ra, RType type, bool success = true);
   RType getResultType() const { return type_; }
   void setResultType(RType type) { type_ = type; }
