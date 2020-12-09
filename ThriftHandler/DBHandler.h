@@ -638,10 +638,6 @@ class DBHandler : public OmniSciIf {
       const SystemParameters system_parameters,
       bool check_privileges = true);
 
-  void prepare_query_result(TQueryResult& _return,
-                            const std::string& query_str,
-                            const std::string& nonce);
-
   void sql_execute_local(TQueryResult& _return,
                          const QueryStateProxy& query_state_proxy,
                          const ExecutorDeviceType device_type,

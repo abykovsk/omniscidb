@@ -5239,41 +5239,6 @@ void DBHandler::check_and_invalidate_sessions(Parser::DDLStmt* ddl) {
   }
 }
 
-void DBHandler::prepare_query_result(TQueryResult& _return,
-                                     const std::string& query_str,
-                                     const std::string& nonce) {
-  _return.nonce = nonce;
-  _return.execution_time_ms = 0;
-  ParserWrapper pw{query_str};
-  switch (pw.getQueryType()) {
-    case ParserWrapper::QueryType::Read: {
-      _return.query_type = TQueryType::READ;
-      VLOG(1) << "query type: READ";
-      break;
-    }
-    case ParserWrapper::QueryType::Write: {
-      _return.query_type = TQueryType::WRITE;
-      VLOG(1) << "query type: WRITE";
-      break;
-    }
-    case ParserWrapper::QueryType::SchemaRead: {
-      _return.query_type = TQueryType::SCHEMA_READ;
-      VLOG(1) << "query type: SCHEMA READ";
-      break;
-    }
-    case ParserWrapper::QueryType::SchemaWrite: {
-      _return.query_type = TQueryType::SCHEMA_WRITE;
-      VLOG(1) << "query type: SCHEMA WRITE";
-      break;
-    }
-    default: {
-      _return.query_type = TQueryType::UNKNOWN;
-      LOG(WARNING) << "query type: UNKNOWN";
-      break;
-    }
-  }
-}
-
 void DBHandler::sql_execute_impl(ExecutionResult& _return,
                                  QueryStateProxy query_state_proxy,
                                  const bool column_format,
