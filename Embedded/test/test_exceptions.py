@@ -20,13 +20,13 @@ def test_failed_init():
         pass
 
     with pytest.raises(RuntimeError) as excinfo:
-        engine = dbe.PyDbEngine(**{"port": 5555, "path": "/"+data_path})
+        engine = dbe.PyDbEngine("/"+data_path, **{'calcite-port':9091})
     assert "Permission denied" in str(excinfo.value)
 
 ######################Check init with right parameters
 def test_success_init():
     global engine
-    engine = dbe.PyDbEngine(**{"port": 5555, "path": data_path})
+    engine = dbe.PyDbEngine(data_path, **{'calcite-port':9091})
     assert bool(engine.closed) == False
 
 engine = None

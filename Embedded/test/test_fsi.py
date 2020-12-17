@@ -6,7 +6,7 @@ import dbe
 import ctypes
 ctypes._dlopen('libDBEngine.so', ctypes.RTLD_GLOBAL)
 
-d = dbe.PyDbEngine(path='data', port=9092)
+d = dbe.PyDbEngine('data', 'enable-fsi', **{'calcite-port':9091})
 assert not d.closed
 print("DDL")
 r = d.executeDDL("""
