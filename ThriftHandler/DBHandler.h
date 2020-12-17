@@ -635,7 +635,7 @@ class DBHandler : public OmniSciIf {
       const std::string& query_str,
       const std::vector<TFilterPushDownInfo>& filter_push_down_info,
       const bool acquire_locks,
-      const SystemParameters system_parameters,
+      const SystemParameters& system_parameters,
       bool check_privileges = true);
 
   void sql_execute_local(TQueryResult& _return,

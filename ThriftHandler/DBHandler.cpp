@@ -1170,7 +1170,6 @@ void DBHandler::sql_execute(ExecutionResult& _return,
       DBHandler::sql_execute_impl(_return,
                                   query_state->createQueryStateProxy(),
                                   column_format,
-                                  //nonce,
                                   session_ptr->get_executor_device_type(),
                                   first_n,
                                   at_most_n);
@@ -5590,7 +5589,7 @@ std::pair<TPlanResult, lockmgr::LockedTableDescriptors> DBHandler::parse_to_ra(
     const std::string& query_str,
     const std::vector<TFilterPushDownInfo>& filter_push_down_info,
     const bool acquire_locks,
-    const SystemParameters system_parameters,
+    const SystemParameters& system_parameters,
     bool check_privileges) {
   query_state::Timer timer = query_state_proxy.createTimer(__func__);
   ParserWrapper pw{query_str};
