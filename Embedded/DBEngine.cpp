@@ -101,11 +101,16 @@ class DBEngineImpl : public DBEngine {
 
   ~DBEngineImpl() { reset(); }
 
-  bool init(const CommandLineOptions& prog_config_opts) {
+  bool init(CommandLineOptions& prog_config_opts) {
     static bool initialized{false};
     if (initialized) {
       throw std::runtime_error("Database engine already initialized");
     }
+
+    fsi_.reset(new ForeignStorageInterface());
+    registerArrowForeignStorage(fsi_);
+    registerArrowCsvForeignStorage(fsi_);
+
     std::string base_path = prog_config_opts.base_path;
     bool is_new_db = base_path.empty() || !catalogExists(base_path);
     if (is_new_db) {
@@ -113,7 +118,10 @@ class DBEngineImpl : public DBEngine {
       if (base_path.empty()) {
         throw std::runtime_error("Database directory could not be created");
       }
+      prog_config_opts.base_path = base_path;
     }
+    prog_config_opts.validate_base_path();
+    prog_config_opts.validate();
     try {
       db_handler_ = mapd::make_shared<DBHandler>(
               prog_config_opts.db_leaves,
@@ -148,7 +156,8 @@ class DBEngineImpl : public DBEngine {
 #ifdef ENABLE_GEOS
               prog_config_opts.libgeos_so_filename,
 #endif
-              prog_config_opts.disk_cache_config);
+              prog_config_opts.disk_cache_config,
+              fsi_);
     } catch (const std::exception& e) {
       LOG(FATAL) << "Failed to initialize database handler: " << e.what();
     }
@@ -418,6 +427,7 @@ class DBEngineImpl : public DBEngine {
  private:
   std::string base_path_;
   std::string session_id_;
+  std::shared_ptr<ForeignStorageInterface> fsi_;
   mapd::shared_ptr<DBHandler> db_handler_;
   bool is_temp_db_;
   std::string udf_filename_;
@@ -431,15 +441,33 @@ namespace {
 std::mutex engine_create_mutex;
 }
 
-std::shared_ptr<DBEngine> DBEngine::create(const std::string& parameters) {
+std::shared_ptr<DBEngine> DBEngine::create(const std::string& commandLine) {
   const std::lock_guard<std::mutex> lock(engine_create_mutex);
-  CommandLineOptions options(parameters.c_str());
-  auto engine = std::make_shared<DBEngineImpl>();
 
+  std::string data_path;
+  auto parameters = boost::program_options::split_unix(commandLine);
+  int argc = (int)parameters.size();
+  if (argc > 0 && parameters[0][0] != '-') {
+    data_path = parameters[0];
+  }
+  std::vector<char*> cstrings ;
+  for(auto& param : parameters){
+    cstrings.push_back(const_cast<char*> (param.c_str()));
+  }
+  char** argv = cstrings.data();
+
+  CommandLineOptions options(data_path.c_str());
+  options.system_parameters.omnisci_server_port = -1;
+  options.system_parameters.calcite_keepalive = true;
+
+  if (options.parse_command_line(argc, argv, true)) {
+    throw std::runtime_error("DBE paramerameters parsing failed");
+  }
+
+  auto engine = std::make_shared<DBEngineImpl>();
   if (!engine->init(options)) {
     throw std::runtime_error("DBE initialization failed");
   }
-
   return engine;
 }
 
