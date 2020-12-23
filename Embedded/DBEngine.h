@@ -19,8 +19,6 @@
 #include <arrow/table.h>
 #include "DBETypes.h"
 
-#define DEFAULT_CALCITE_PORT 3279
-
 namespace EmbeddedDatabase {
 
 class Cursor {

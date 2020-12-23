@@ -108,43 +108,38 @@ class DBEngineImpl : public DBEngine {
     }
 
     // Split the command line into parameters
-    std::string base_path;
     std::vector<std::string> parameters;
     if (!cmd_line.empty()) {
       parameters = boost::program_options::split_unix(cmd_line);
-      if (!parameters.empty() && (parameters[0][0] != '-')) {
-          base_path = parameters[0];
-      }
     }
 
+    // Generate command line to initialize CommandLineOptions for DBHandler
+    const char* log_option = "omnisci_dbe";
+    std::vector<const char*> cstrings;
+    cstrings.push_back(log_option);
+    for(auto& param : parameters){
+      cstrings.push_back(param.c_str());
+    }
+    int argc = cstrings.size();
+    const char** argv = cstrings.data();
+
+    CommandLineOptions prog_config_opts(log_option);
+    if (prog_config_opts.parse_command_line(argc, argv, false)) {
+      throw std::runtime_error("DBE paramerameters parsing failed");
+    }
+
+    auto base_path = prog_config_opts.base_path;
+
     // Check path to the database
-    bool is_empty_path = base_path.empty();
-    bool is_new_db = is_empty_path || !catalogExists(base_path);
+    bool is_new_db = base_path.empty() || !catalogExists(base_path);
     if (is_new_db) {
       base_path = createCatalog(base_path);
       if (base_path.empty()) {
         throw std::runtime_error("Database directory could not be created");
       }
     }
-
-    CommandLineOptions prog_config_opts(base_path.c_str());
-
-    // Generate command line to initialize CommandLineOptions for DBHandler
-    std::vector<char*> cstrings;
-    cstrings.push_back(const_cast<char*> (base_path.c_str()));
-    if (is_empty_path) {
-      cstrings.push_back(const_cast<char*> (base_path.c_str()));
-    }
-    for(auto& param : parameters){
-      cstrings.push_back(const_cast<char*> (param.c_str()));
-    }
-    int argc = cstrings.size();
-    if (argc > 0) {
-      char** argv = cstrings.data();
-      if (prog_config_opts.parse_command_line(argc, argv, true)) {
-        throw std::runtime_error("DBE paramerameters parsing failed");
-      }
-    }
+    prog_config_opts.base_path = base_path;
+    prog_config_opts.init_logging();
 
     prog_config_opts.system_parameters.omnisci_server_port = -1;
     prog_config_opts.system_parameters.calcite_keepalive = true;
@@ -383,7 +378,20 @@ class DBEngineImpl : public DBEngine {
 
  protected:
   void reset() {
-    db_handler_->disconnect(session_id_);
+    std::weak_ptr<ForeignStorageInterface> weak_fsi = fsi_;
+    if (db_handler_) {
+      db_handler_->disconnect(session_id_);
+      db_handler_->shutdown();
+    }
+    Catalog_Namespace::SysCatalog::destroy();
+    Catalog_Namespace::Catalog::clear();
+    db_handler_.reset();
+    fsi_.reset();
+
+    // By that moment FSI should be destroyed.
+    CHECK(!weak_fsi.lock());
+
+    logger::shutdown();
     if (is_temp_db_) {
       boost::filesystem::remove_all(base_path_);
     }
