@@ -206,6 +206,7 @@ DBHandler::DBHandler(const std::vector<LeafHostInfo>& db_leaves,
                      const std::string& libgeos_so_filename,
 #endif
                      const DiskCacheConfig& disk_cache_config,
+                     const bool is_new_db,
                      std::shared_ptr<ForeignStorageInterface> fsi)
     : leaf_aggregator_(db_leaves)
     , string_leaves_(string_leaves)
@@ -343,7 +344,7 @@ DBHandler::DBHandler(const std::vector<LeafHostInfo>& db_leaves,
                                 data_mgr_,
                                 authMetadata,
                                 calcite_,
-                                false,
+                                is_new_db,
                                 !db_leaves.empty(),
                                 string_leaves_);
   } catch (const std::exception& e) {

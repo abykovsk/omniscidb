@@ -191,6 +191,7 @@ class DBHandler : public OmniSciIf {
             const std::string& libgeos_so_filename,
 #endif
             const DiskCacheConfig& disk_cache_config,
+            const bool is_new_db = false,
             std::shared_ptr<ForeignStorageInterface> fsi = nullptr);
 
   ~DBHandler() override;

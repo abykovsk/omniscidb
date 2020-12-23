@@ -162,7 +162,7 @@ cdef class PyDbEngine:
     cdef shared_ptr[DBEngine] c_dbe  #Hold a C++ instance which we're wrapping
 
     def __cinit__(self, data_path, *args, **kwargs):
-        cmd_str = data_path
+        cmd_str = '' if data_path is None else str(data_path)
         cmd_str += "".join(' --%s' % x for x in args)
         cmd_str += "".join(' --%s %r' % x for x in kwargs.iteritems())
         self.c_dbe = DBEngine.create(bytes(cmd_str, 'utf-8'))

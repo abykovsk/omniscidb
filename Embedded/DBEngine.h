@@ -47,7 +47,7 @@ class DBEngine {
   void importArrowTable(const std::string& name,
                         std::shared_ptr<arrow::Table>& table,
                         uint64_t fragment_size = 0);
-  static std::shared_ptr<DBEngine> create(const std::string& parameters);
+  static std::shared_ptr<DBEngine> create(const std::string& cmd_line);
   std::vector<std::string> getTables();
   std::vector<ColumnDetails> getTableDetails(const std::string& table_name);
   void createUser(const std::string& user_name, const std::string& password);
