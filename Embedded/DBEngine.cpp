@@ -365,8 +365,8 @@ class DBEngineImpl : public DBEngine {
 
   bool setDatabase(std::string& db_name) {
     auto& sys_cat = Catalog_Namespace::SysCatalog::instance();
-    auto user = db_handler_->get_session_copy(session_id_).get_currentUser();
-    auto catalog = sys_cat.switchDatabase(db_name, user.userName);
+    auto& user = db_handler_->get_session_copy(session_id_).get_currentUser();
+    sys_cat.switchDatabase(db_name, user.userName);
     return true;
   }
 
